@@ -44,11 +44,11 @@ class TIC:
     def read_gauge(self, gauge_no):
         """Return <DateTime> object and pressure in mbar"""
         #pressure = tic.gauge1.pressure*1e-2
-        old = self.data[gauge_no][-5:,1]
-        weights = (~np.isnan(old)) * 2.0**np.array(5)
-        old[np.isnan(old)] = 0
         pressure = 1050*random()
-        pressure = (pressure + old*weights) / (1+weights)
+        #old = np.nanmean(self.data[gauge_no][:20,1])
+        old = self.data[gauge_no][0,1]
+        if np.isfinite(old):
+            pressure = (pressure + 20*old)/21
         t = 1e-9 * time_ns()
         self.store_data(gauge_no, t, pressure)
         # Print reading
@@ -70,13 +70,17 @@ class GaugeFigure():
         self.axes[-1,0].set_xlabel('Time (seconds)')
         self.axes[nrows//2,0].set_ylabel('Pressure (mbar)')
         self.series = []
+        self.gradients = []
         for ax in self.axes[:,0]:
             s = ax.plot([], [], color='brown', marker='o')
             self.series.append(s[0])
+            g = ax.plot([], [], color='green', marker='none', linestyle='--', linewidth=2)
+            self.gradients.append(g[0])
+            ax.set_ylim([0,1050])
         # Setup the right column with text boxes
         self.text = []
         for ax in self.axes[:,1]:
-            #ax.set_axis_off()
+            ax.set_axis_off()
             textbox = ax.text(0, 0.5, f'[]', ha='left', va='center', fontsize=36, color='blue', transform=ax.transAxes)
             self.text.append(textbox)
         # Define time offset, plotting relative to this
@@ -94,18 +98,23 @@ class GaugeFigure():
         #self.axes[row,0].plot(xdata, ydata)
         self.axes[0,0].set_xlim(tt-tsize, tt)
         # Recompute data limits and update view limits
-        self.axes[row,0].relim()
-        self.axes[row,0].autoscale_view()
-        # Write number in right column
-        self.text[row].set_text(f'{pressure:.1f} mbar')
+        #self.axes[row,0].relim()
+        #self.axes[row,0].autoscale_view()
+        # Estimate gradient
+        coef = np.polyfit(xdata[-10:], ydata[-10:], 1)
+        gradient = coef[0]
+        tmpx = np.array([xdata[-1]-tsize/4, xdata[-1]])
+        self.gradients[row].set_data(tmpx, np.poly1d(coef)(tmpx))
+        # Write numbers in right column
+        self.text[row].set_text(f'{pressure:.1f} mbar\n({gradient:.1f} mbar/s)')
 
     def flush(self):
         """Redraw figure with updated data"""
-        logger.info('Start draw')
+        #logger.info('Start draw')
         self.fig.canvas.draw()
-        logger.info('Start flush')
+        #logger.info('Start flush')
         self.fig.canvas.flush_events()
-        logger.info('Flush done!')
+        #logger.info('Flush done!')
 
 
 def run():
@@ -125,7 +134,7 @@ def run():
             t, pressure = tic.read_gauge(g)
             fig.update_data(g-1, t, pressure)
         fig.flush()
-        #sleep(0.5)
+        sleep(0.5)
 
 
 if __name__ == '__main__':
