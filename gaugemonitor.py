@@ -21,8 +21,13 @@ def setup_logger():
     return logger
 
 class TIC:
-    def __init__(self, port, gauges, memory=200):
+    def __init__(self, port, gauges, memory=200, emulate=False):
         """Setup TIC connection"""
+        self.emulate = emulate
+        if emulate is False:
+            from edwardsserial.tic import TIC
+            self.tic = TIC('COM2')
+        
         # Initialize SQLite3 database for storing data
         #self.db = sqlite3.connect('tmp.db')
         #cursor = self.db.cursor()
@@ -43,14 +48,24 @@ class TIC:
 
     def read_gauge(self, gauge_no):
         """Return <DateTime> object and pressure in mbar"""
-        #pressure = tic.gauge1.pressure*1e-2
-        pressure = 1050*random()
-        #old = np.nanmean(self.data[gauge_no][:20,1])
-        old = self.data[gauge_no][0,1]
-        if np.isfinite(old):
-            pressure = (pressure + 20*old)/21
+        # Get time
         t = 1e-9 * time_ns()
-        self.store_data(gauge_no, t, pressure)
+        
+        # Emulate or read from TIC
+        if self.emulate:
+            pressure = 1050*random()
+            old = self.data[gauge_no][0,1]
+            if np.isfinite(old):
+                pressure = (pressure + 20*old)/21
+        else:
+            #pressure = self.tic.gauge1.pressure * 1e-2  # mbar
+            pressure = getattr(self.tic, f'gauge{gauge_no}').pressure
+            if pressure is None:
+                pressure = np.nan
+            else:
+                pressure *= 1e-2
+                self.store_data(gauge_no, t, pressure)
+        
         # Print reading
         datestr = datetime.fromtimestamp(t).strftime('%Y-%m-%d %H:%M:%S')
         print(f'{gauge_no} - {datestr} - {pressure}')
