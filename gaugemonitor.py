@@ -6,6 +6,8 @@ import matplotlib, matplotlib.pyplot as plt, matplotlib.transforms as transforms
 from matplotlib.dates import ConciseDateFormatter, DateFormatter
 #import sqlite3
 import sys
+from os.path import dirname, join
+from os import makedirs
 import logging
 #from edwardsserial.tic import TIC
 
@@ -13,7 +15,7 @@ TIC_PORT = 'COM2'
 
 def setup_logger():
     logger = logging.getLogger()
-    logger.setLevel(logging.DEBUG)
+    logger.setLevel(logging.INFO)
     logFormatter = logging.Formatter("%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s")
     consoleHandler = logging.StreamHandler(sys.stdout)
     consoleHandler.setFormatter(logFormatter)
@@ -37,6 +39,16 @@ class TIC:
         self.data = dict()
         for gauge_no in gauges:
             self.data[gauge_no] = np.full((memory, 2), np.nan)
+        
+        # Open files for logging
+        self.files = dict()
+        datestr = datetime.now().strftime('%Y-%m-%d %H-%M-%S')
+        logdir = join(dirname(__file__), 'logs')
+        makedirs(logdir, exist_ok=True)
+        for gauge_no in gauges:
+            fname = join(logdir, f'{datestr}_gauge{gauge_no}.txt')
+            logger.info(f'Opening file for logging: {fname}')
+            self.files[gauge_no] = open(fname, 'w', buffering=1)
 
     def store_data(self, gauge_no, t, pressure):
         """Store data in cache and write to file"""
@@ -64,11 +76,16 @@ class TIC:
                 pressure = np.nan
             else:
                 pressure *= 1e-2
-                self.store_data(gauge_no, t, pressure)
+        
+        self.store_data(gauge_no, t, pressure)
         
         # Print reading
-        datestr = datetime.fromtimestamp(t).strftime('%Y-%m-%d %H:%M:%S')
+        datestr = datetime.fromtimestamp(t).strftime('%Y-%m-%d %H:%M:%S.%f')
         print(f'{gauge_no} - {datestr} - {pressure}')
+
+        # Write to file
+        self.files[gauge_no].write(f'{datestr}    {pressure:.5e}\n')
+
         return t, pressure
 
 
